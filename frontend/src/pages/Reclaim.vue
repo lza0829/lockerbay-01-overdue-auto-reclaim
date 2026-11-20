@@ -3,26 +3,65 @@ import { onMounted, ref } from 'vue'
 import { api } from '../api.js'
 const rows = ref([])
 const q = ref([])
-onMounted(async () => {
+const reclaims = ref([])
+const report = ref(null)
+const busy = ref(false)
+async function load() {
   rows.value = await api.occupancies()
   q.value = await api.quarantine()
-})
+  reclaims.value = await api.reclaims()
+}
+async function run() {
+  busy.value = true
+  try {
+    report.value = await api.runReclaim()
+    await load()
+  } finally {
+    busy.value = false
+  }
+}
+onMounted(load)
 </script>
 <template>
   <div>
     <h1>回收</h1>
-    <p class="sub">超时回收空桩待实现；此处先展示占用账与搁置。</p>
+    <p class="sub">按已落地 reclaim_deadline_at 裁决：到期关占用、格口回 free、留核证；未到期不动。扫描与关账同事务提交。</p>
+    <p>
+      <button :disabled="busy" @click="run">跑一轮超时回收扫描</button>
+      <span v-if="report" class="sub" style="margin-left:.75rem">
+        扫描时刻 <code>{{ report.scanned_at }}</code> · 本次关账 <b>{{ report.reclaimed_count }}</b> 条 · 补写 deadline {{ report.backfilled_deadlines }} 条
+      </span>
+    </p>
     <div class="panel">
+      <h2 style="margin:0 0 .5rem;font-size:1rem">回收核证（只读）</h2>
+      <p v-if="!reclaims.length" class="sub">暂无超时回收记录。</p>
+      <table v-else>
+        <thead><tr><th>占用</th><th>格口</th><th>运单</th><th>回收截止</th><th>关闭时刻</th><th>原因</th></tr></thead>
+        <tbody>
+          <tr v-for="r in reclaims" :key="r.occupancy_id">
+            <td><code>{{ r.occupancy_id }}</code></td>
+            <td>{{ r.cell_id }}</td>
+            <td>{{ r.tracking_no }}</td>
+            <td>{{ r.reclaim_deadline_at }}</td>
+            <td>{{ r.closed_at }}</td>
+            <td>{{ r.closed_reason }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:1rem">
       <h2 style="margin:0 0 .5rem;font-size:1rem">占用账</h2>
       <table>
-        <thead><tr><th>占用</th><th>格口</th><th>运单</th><th>状态</th><th>开启</th></tr></thead>
+        <thead><tr><th>占用</th><th>格口</th><th>运单</th><th>状态</th><th>开启</th><th>回收截止</th><th>关闭</th></tr></thead>
         <tbody>
           <tr v-for="r in rows" :key="r.id">
             <td><code>{{ r.id }}</code></td>
             <td>{{ r.cell_id }}</td>
             <td>{{ r.tracking_no }}</td>
-            <td>{{ r.status }}</td>
+            <td>{{ r.status }}<template v-if="r.closed_reason">（{{ r.closed_reason }}）</template></td>
             <td>{{ r.opened_at }}</td>
+            <td>{{ r.reclaim_deadline_at || '—' }}</td>
+            <td>{{ r.closed_at || '—' }}</td>
           </tr>
         </tbody>
       </table>

@@ -1,4 +1,5 @@
 {
+  "note": "超时回收对照夹具（overdue_hours=48）：CAB-A-02 落柜 2026-11-17T09:00Z → deadline 2026-11-19T09:00Z 已到期应回收；CAB-B-01 落柜 2026-11-20T06:00Z → deadline 2026-11-22T06:00Z 未到期不得动。",
   "cabinets": [
     {"id": "CAB-A", "label": "东门柜阵", "site": "园区东门"},
     {"id": "CAB-B", "label": "驿站侧柜", "site": "北侧驿站"}
@@ -13,8 +14,8 @@
   ],
   "events": [
     {"id": "E1", "cabinet_id": "CAB-A", "cell_id": "CAB-A-01", "event_type": "drop", "event_ts": "2026-11-18T08:00:00Z", "tracking_no": "TN1001", "payload": {}},
-    {"id": "E2", "cabinet_id": "CAB-A", "cell_id": "CAB-A-02", "event_type": "drop", "event_ts": "2026-11-18T09:00:00Z", "tracking_no": "TN1002", "payload": {}},
+    {"id": "E2", "cabinet_id": "CAB-A", "cell_id": "CAB-A-02", "event_type": "drop", "event_ts": "2026-11-17T09:00:00Z", "tracking_no": "TN1002", "payload": {}},
     {"id": "E3", "cabinet_id": "CAB-A", "cell_id": "CAB-A-01", "event_type": "pickup", "event_ts": "2026-11-18T12:00:00Z", "tracking_no": "TN1001", "payload": {}},
-    {"id": "E4", "cabinet_id": "CAB-B", "cell_id": "CAB-B-01", "event_type": "drop", "event_ts": "2026-11-18T10:30:00Z", "tracking_no": "TN2001", "payload": {}}
+    {"id": "E4", "cabinet_id": "CAB-B", "cell_id": "CAB-B-01", "event_type": "drop", "event_ts": "2026-11-20T06:00:00Z", "tracking_no": "TN2001", "payload": {}}
   ]
 }

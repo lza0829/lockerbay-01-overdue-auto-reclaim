@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.db import FIXTURES_DIR, connect
+from app.modules.overdue_auto_reclaim import materialize_deadline
+from app.seed import overdue_hours
 
 
 def run_batch():
@@ -15,6 +17,7 @@ def run_batch():
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     conn = connect()
     accepted = 0
+    hours = overdue_hours(conn)
     try:
         for ev in events:
             conn.execute(
@@ -37,8 +40,17 @@ def run_batch():
                 if cell and cell["status"] == "free":
                     oid = f"OCC-{ev['cell_id']}-{ev['id']}"
                     conn.execute(
-                        "INSERT INTO occupancies(id, cell_id, tracking_no, opened_at, closed_at, status, last_event_id) VALUES (?,?,?,?,?,?,?)",
-                        (oid, ev["cell_id"], ev["tracking_no"], ev["event_ts"], None, "occupied", ev["id"]),
+                        "INSERT INTO occupancies(id, cell_id, tracking_no, opened_at, closed_at, status, last_event_id, reclaim_deadline_at) VALUES (?,?,?,?,?,?,?,?)",
+                        (
+                            oid,
+                            ev["cell_id"],
+                            ev["tracking_no"],
+                            ev["event_ts"],
+                            None,
+                            "occupied",
+                            ev["id"],
+                            materialize_deadline(ev["event_ts"], hours),
+                        ),
                     )
                     conn.execute("UPDATE cells SET status='occupied' WHERE id=?", (ev["cell_id"],))
             elif ev["event_type"] == "pickup" and ev.get("cell_id"):

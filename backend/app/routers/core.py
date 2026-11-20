@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Body, HTTPException
 
 from app.db import connect
+from app.modules import overdue_auto_reclaim as reclaim_svc
 from app.seed import overdue_hours
 from app.services import bay as bay_svc
 from app.services import ingest as ingest_svc
@@ -75,6 +76,34 @@ def occupancy_proofs():
             "SELECT * FROM occupancy_proofs ORDER BY id DESC LIMIT 50"
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.post("/reclaim/run")
+def run_reclaim(body: dict | None = Body(default=None)):
+    """超时回收扫描：补写、裁决、关账、格口回 free 同一事务一次提交。"""
+    now = (body or {}).get("now")
+    if now is not None:
+        try:
+            reclaim_svc.parse_ts(now)
+        except (ValueError, TypeError):
+            raise HTTPException(400, "now 须为 ISO-8601 时刻")
+    conn = connect()
+    try:
+        result = reclaim_svc.run_scan(conn, overdue_hours=overdue_hours(conn), now=now)
+        conn.commit()
+        return result
+    finally:
+        conn.close()
+
+
+@router.get("/reclaims")
+def list_reclaims():
+    """超时回收核证（只读）：占用、格口、deadline、关闭时刻。"""
+    conn = connect()
+    try:
+        return reclaim_svc.list_reclaims(conn)
     finally:
         conn.close()
 

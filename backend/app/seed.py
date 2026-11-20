@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from app.db import FIXTURES_DIR, connect
+from app.modules.overdue_auto_reclaim import materialize_deadline
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -42,7 +43,9 @@ CREATE TABLE IF NOT EXISTS occupancies (
   opened_at TEXT NOT NULL,
   closed_at TEXT,
   status TEXT NOT NULL DEFAULT 'occupied',
-  last_event_id TEXT
+  last_event_id TEXT,
+  reclaim_deadline_at TEXT,
+  closed_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS quarantine (
@@ -76,9 +79,18 @@ def overdue_hours(conn) -> int:
     return int(row["value"]) if row else 48
 
 
+def _ensure_column(conn, table: str, column: str, ddl: str):
+    cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
 def init_db():
     conn = connect()
     conn.executescript(SCHEMA)
+    # 老库迁移：超时回收所需的占用账列
+    _ensure_column(conn, "occupancies", "reclaim_deadline_at", "reclaim_deadline_at TEXT")
+    _ensure_column(conn, "occupancies", "closed_reason", "closed_reason TEXT")
     if not conn.execute("SELECT 1 FROM settings WHERE key='overdue_hours'").fetchone():
         conn.execute("INSERT INTO settings(key, value) VALUES ('overdue_hours', '48')")
     if conn.execute("SELECT COUNT(*) AS c FROM cabinets").fetchone()["c"] == 0:
@@ -119,8 +131,17 @@ def _seed(conn):
         if ev["event_type"] == "drop" and ev.get("cell_id"):
             oid = f"OCC-{ev['cell_id']}-{ev['id']}"
             conn.execute(
-                "INSERT INTO occupancies(id, cell_id, tracking_no, opened_at, closed_at, status, last_event_id) VALUES (?,?,?,?,?,?,?)",
-                (oid, ev["cell_id"], ev["tracking_no"], ev["event_ts"], None, "occupied", ev["id"]),
+                "INSERT INTO occupancies(id, cell_id, tracking_no, opened_at, closed_at, status, last_event_id, reclaim_deadline_at) VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    oid,
+                    ev["cell_id"],
+                    ev["tracking_no"],
+                    ev["event_ts"],
+                    None,
+                    "occupied",
+                    ev["id"],
+                    materialize_deadline(ev["event_ts"], overdue_hours(conn)),
+                ),
             )
             conn.execute("UPDATE cells SET status='occupied' WHERE id=?", (ev["cell_id"],))
             conn.execute(
